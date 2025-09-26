@@ -3,6 +3,27 @@ import { components } from '@octokit/openapi-types'
 
 export type WorkflowJobType = components['schemas']['job']
 
+export interface StepInfo {
+  readonly name: string
+  readonly milestone: boolean
+  readonly conclusion: string | null
+  readonly started_at: string
+  readonly completed_at: string
+}
+
+export interface JobInfo {
+  readonly name: string
+  readonly steps: StepInfo[]
+}
+
+export interface Stats {
+  readonly cpu: CPUStats[]
+  readonly memory: MemoryStats[]
+  readonly network: NetworkStats[]
+  readonly disk: DiskStats[]
+  readonly diskSize: DiskSizeStats[]
+}
+
 export interface CPUStats {
   readonly time: number
   readonly totalLoad: number

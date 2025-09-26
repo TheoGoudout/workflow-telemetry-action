@@ -1,7 +1,30 @@
-import { WorkflowJobType } from './interfaces'
+import { StepInfo, JobInfo, WorkflowJobType } from './interfaces'
 import * as logger from './logger'
 
-function generateTraceChartForSteps(job: WorkflowJobType): string {
+function getStepsTraceMetrics(job: WorkflowJobType): JobInfo {
+  let steps: StepInfo[] = []
+
+  for (const step of job.steps || []) {
+    if (!step.started_at || !step.completed_at) {
+      continue
+    }
+
+    steps.push({
+      name: step.name,
+      milestone: step.name === 'Set up job' && step.number === 1,
+      conclusion: step.conclusion,
+      started_at: step.started_at,
+      completed_at: step.completed_at
+    })
+  }
+
+  return {
+    name: job.name,
+    steps
+  }
+}
+
+function generateStepsTraceChart(job: JobInfo): string {
   let chartContent = ''
 
   /**
@@ -34,7 +57,7 @@ function generateTraceChartForSteps(job: WorkflowJobType): string {
       `${step.name.replace(/:/g, '-')} : `
     )
 
-    if (step.name === 'Set up job' && step.number === 1) {
+    if (step.milestone) {
       chartContent = chartContent.concat('milestone, ')
     }
 
@@ -97,23 +120,24 @@ export async function finish(currentJob: WorkflowJobType): Promise<boolean> {
 
 export async function report(
   currentJob: WorkflowJobType
-): Promise<string | null> {
+): Promise<[JobInfo | null, string | null]> {
   logger.info(`Reporting step tracer result ...`)
 
   if (!currentJob) {
-    return null
+    return [null, null]
   }
 
   try {
-    const postContent: string = generateTraceChartForSteps(currentJob)
+    const postContent: any = getStepsTraceMetrics(currentJob)
+    const postChart: string = generateStepsTraceChart(postContent)
 
     logger.info(`Reported step tracer result`)
 
-    return postContent
+    return [postContent, postChart]
   } catch (error: any) {
     logger.error('Unable to report step tracer result')
     logger.error(error)
 
-    return null
+    return [null, null]
   }
 }

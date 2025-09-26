@@ -3,6 +3,7 @@ import path from 'path'
 import axios from 'axios'
 import * as core from '@actions/core'
 import {
+  Stats,
   CPUStats,
   DiskSizeStats,
   DiskStats,
@@ -37,7 +38,23 @@ async function triggerStatCollect(): Promise<void> {
   }
 }
 
-async function reportWorkflowMetrics(): Promise<string> {
+async function getWorkflowMetrics(): Promise<Stats> {
+  const cpu = await getCPUStats()
+  const memory = await getMemoryStats()
+  const network = await getNetworkStats()
+  const disk = await getDiskStats()
+  const diskSize = await getDiskSizeStats()
+
+  return {
+    cpu,
+    memory,
+    network,
+    disk,
+    diskSize
+  }
+}
+
+async function reportWorkflowMetrics(stats: Stats): Promise<string> {
   const theme: string = core.getInput('theme', { required: false })
   let axisColor = BLACK
   switch (theme) {
@@ -51,11 +68,11 @@ async function reportWorkflowMetrics(): Promise<string> {
       core.warning(`Invalid theme: ${theme}`)
   }
 
-  const { userLoadX, systemLoadX } = await getCPUStats()
-  const { activeMemoryX, availableMemoryX } = await getMemoryStats()
-  const { networkReadX, networkWriteX } = await getNetworkStats()
-  const { diskReadX, diskWriteX } = await getDiskStats()
-  const { diskAvailableX, diskUsedX } = await getDiskSizeStats()
+  const { userLoadX, systemLoadX } = processCPUStats(stats.cpu)
+  const { activeMemoryX, availableMemoryX } = processMemoryStats(stats.memory)
+  const { networkReadX, networkWriteX } = processNetworkStats(stats.network)
+  const { diskReadX, diskWriteX } = processDiskStats(stats.disk)
+  const { diskAvailableX, diskUsedX } = processDiskSizeStats(stats.diskSize)
 
   const cpuLoad =
     userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
@@ -215,17 +232,21 @@ async function reportWorkflowMetrics(): Promise<string> {
   return postContentItems.join('\n')
 }
 
-async function getCPUStats(): Promise<ProcessedCPUStats> {
-  const userLoadX: ProcessedStats[] = []
-  const systemLoadX: ProcessedStats[] = []
-
+async function getCPUStats(): Promise<CPUStats[]> {
   logger.debug('Getting CPU stats ...')
   const response = await axios.get(`http://localhost:${STAT_SERVER_PORT}/cpu`)
   if (logger.isDebugEnabled()) {
     logger.debug(`Got CPU stats: ${JSON.stringify(response.data)}`)
   }
 
-  response.data.forEach((element: CPUStats) => {
+  return response.data
+}
+
+function processCPUStats(data: CPUStats[]): ProcessedCPUStats {
+  const userLoadX: ProcessedStats[] = []
+  const systemLoadX: ProcessedStats[] = []
+
+  data.forEach((element: CPUStats) => {
     userLoadX.push({
       x: element.time,
       y: element.userLoad && element.userLoad > 0 ? element.userLoad : 0
@@ -240,10 +261,7 @@ async function getCPUStats(): Promise<ProcessedCPUStats> {
   return { userLoadX, systemLoadX }
 }
 
-async function getMemoryStats(): Promise<ProcessedMemoryStats> {
-  const activeMemoryX: ProcessedStats[] = []
-  const availableMemoryX: ProcessedStats[] = []
-
+async function getMemoryStats(): Promise<MemoryStats[]> {
   logger.debug('Getting memory stats ...')
   const response = await axios.get(
     `http://localhost:${STAT_SERVER_PORT}/memory`
@@ -252,7 +270,14 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
     logger.debug(`Got memory stats: ${JSON.stringify(response.data)}`)
   }
 
-  response.data.forEach((element: MemoryStats) => {
+  return response.data
+}
+
+function processMemoryStats(data: MemoryStats[]): ProcessedMemoryStats {
+  const activeMemoryX: ProcessedStats[] = []
+  const availableMemoryX: ProcessedStats[] = []
+
+  data.forEach((element: MemoryStats) => {
     activeMemoryX.push({
       x: element.time,
       y:
@@ -273,10 +298,7 @@ async function getMemoryStats(): Promise<ProcessedMemoryStats> {
   return { activeMemoryX, availableMemoryX }
 }
 
-async function getNetworkStats(): Promise<ProcessedNetworkStats> {
-  const networkReadX: ProcessedStats[] = []
-  const networkWriteX: ProcessedStats[] = []
-
+async function getNetworkStats(): Promise<NetworkStats[]> {
   logger.debug('Getting network stats ...')
   const response = await axios.get(
     `http://localhost:${STAT_SERVER_PORT}/network`
@@ -285,7 +307,14 @@ async function getNetworkStats(): Promise<ProcessedNetworkStats> {
     logger.debug(`Got network stats: ${JSON.stringify(response.data)}`)
   }
 
-  response.data.forEach((element: NetworkStats) => {
+  return response.data
+}
+
+function processNetworkStats(data: NetworkStats[]): ProcessedNetworkStats {
+  const networkReadX: ProcessedStats[] = []
+  const networkWriteX: ProcessedStats[] = []
+
+  data.forEach((element: NetworkStats) => {
     networkReadX.push({
       x: element.time,
       y: element.rxMb && element.rxMb > 0 ? element.rxMb : 0
@@ -300,17 +329,21 @@ async function getNetworkStats(): Promise<ProcessedNetworkStats> {
   return { networkReadX, networkWriteX }
 }
 
-async function getDiskStats(): Promise<ProcessedDiskStats> {
-  const diskReadX: ProcessedStats[] = []
-  const diskWriteX: ProcessedStats[] = []
-
+async function getDiskStats(): Promise<DiskStats[]> {
   logger.debug('Getting disk stats ...')
   const response = await axios.get(`http://localhost:${STAT_SERVER_PORT}/disk`)
   if (logger.isDebugEnabled()) {
     logger.debug(`Got disk stats: ${JSON.stringify(response.data)}`)
   }
 
-  response.data.forEach((element: DiskStats) => {
+  return response.data
+}
+
+function processDiskStats(data: DiskStats[]): ProcessedDiskStats {
+  const diskReadX: ProcessedStats[] = []
+  const diskWriteX: ProcessedStats[] = []
+
+  data.forEach((element: DiskStats) => {
     diskReadX.push({
       x: element.time,
       y: element.rxMb && element.rxMb > 0 ? element.rxMb : 0
@@ -325,10 +358,7 @@ async function getDiskStats(): Promise<ProcessedDiskStats> {
   return { diskReadX, diskWriteX }
 }
 
-async function getDiskSizeStats(): Promise<ProcessedDiskSizeStats> {
-  const diskAvailableX: ProcessedStats[] = []
-  const diskUsedX: ProcessedStats[] = []
-
+async function getDiskSizeStats(): Promise<DiskSizeStats[]> {
   logger.debug('Getting disk size stats ...')
   const response = await axios.get(
     `http://localhost:${STAT_SERVER_PORT}/disk_size`
@@ -337,7 +367,14 @@ async function getDiskSizeStats(): Promise<ProcessedDiskSizeStats> {
     logger.debug(`Got disk size stats: ${JSON.stringify(response.data)}`)
   }
 
-  response.data.forEach((element: DiskSizeStats) => {
+  return response.data
+}
+
+function processDiskSizeStats(data: DiskSizeStats[]): ProcessedDiskSizeStats {
+  const diskAvailableX: ProcessedStats[] = []
+  const diskUsedX: ProcessedStats[] = []
+
+  data.forEach((element: DiskSizeStats) => {
     diskAvailableX.push({
       x: element.time,
       y:
@@ -482,19 +519,20 @@ export async function finish(currentJob: WorkflowJobType): Promise<boolean> {
 
 export async function report(
   currentJob: WorkflowJobType
-): Promise<string | null> {
+): Promise<[Stats | null, string | null]> {
   logger.info(`Reporting stat collector result ...`)
 
   try {
-    const postContent: string = await reportWorkflowMetrics()
+    const postStats: Stats = await getWorkflowMetrics()
+    const postContent: string = await reportWorkflowMetrics(postStats)
 
     logger.info(`Reported stat collector result`)
 
-    return postContent
+    return [postStats, postContent]
   } catch (error: any) {
     logger.error('Unable to report stat collector result')
     logger.error(error)
 
-    return null
+    return [null, null]
   }
 }

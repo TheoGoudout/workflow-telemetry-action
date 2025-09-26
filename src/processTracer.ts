@@ -141,14 +141,14 @@ export async function finish(currentJob: WorkflowJobType): Promise<boolean> {
 
 export async function report(
   currentJob: WorkflowJobType
-): Promise<string | null> {
+): Promise<[CompletedCommand[] | null, string | null]> {
   logger.info(`Reporting process tracer result ...`)
 
   if (!finished) {
     logger.info(
       `Skipped reporting process tracer since process tracer didn't finished`
     )
-    return null
+    return [null, null]
   }
   try {
     const procTraceOutFilePath = path.join(
@@ -306,11 +306,11 @@ export async function report(
 
     logger.info(`Reported process tracer result`)
 
-    return postContent
+    return [completedCommands, postContent]
   } catch (error: any) {
     logger.error('Unable to report process tracer result')
     logger.error(error)
 
-    return null
+    return [null, null]
   }
 }
